@@ -74,10 +74,13 @@ class MainActivity : Activity() {
         isPane = intent.getBooleanExtra(EXTRA_PANE, false)
         window.statusBarColor = c.bg
         window.navigationBarColor = c.bg
-        window.insetsController?.setSystemBarsAppearance(
-            if (prefs.dark) 0 else WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
-            WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS)
         setContentView(buildUi())
+        // only after setContentView: before it the window has no decor view and this crashes
+        runCatching {
+            window.decorView.windowInsetsController?.setSystemBarsAppearance(
+                if (prefs.dark) 0 else WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
+                WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS)
+        }
         if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
         window.decorView.viewTreeObserver.addOnGlobalLayoutListener(layoutListener)
