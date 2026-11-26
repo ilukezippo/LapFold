@@ -94,3 +94,10 @@ class PanelLayoutTest {
         }
     }
 }
+
+class ClampEdgeTest {
+    @Test fun tinyAreaDoesNotCrash() {
+        val a = Area(10f, 10f, 10.5f, 10f)
+        assertEquals(Pair(10f, 10f), PointerMath.clamp(50f, -50f, a))
+    }
+}

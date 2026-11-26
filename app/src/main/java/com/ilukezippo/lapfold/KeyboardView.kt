@@ -39,7 +39,7 @@ class KeyboardView(ctx: Context, private val mods: Modifiers, private val listen
 
     private fun layoutKeys(w: Int, h: Int) {
         rects.clear()
-        val gap = 4f * dp
+        val gap = (minOf(w, h) * 0.006f).coerceIn(2f * dp, 5f * dp)
         val rows = KeyLayout.rows
         // function row is shorter, like a laptop
         val weights = rows.map { r -> if (r.first().small) 0.7f else 1f }
@@ -91,16 +91,16 @@ class KeyboardView(ctx: Context, private val mods: Modifiers, private val listen
             }
             val label = KeyLayout.labelFor(k, shift, mods.caps)
             text.color = if (active) Color.WHITE else theme.keyText
-            text.textSize = when {
-                k.small -> rect.height() * 0.38f
-                label.length > 1 -> rect.height() * 0.30f
-                else -> rect.height() * 0.42f
+            when {
+                k.small -> fitText(label, rect, 0.38f, 15f)
+                label.length > 1 -> fitText(label, rect, 0.30f, 16f)
+                else -> fitText(label, rect, 0.42f, 24f)
             }
             c.drawText(label, rect.centerX(), rect.centerY() - (text.descent() + text.ascent()) / 2, text)
             // show the shifted symbol small in the corner, like real keycaps
             if (!shift && k.shiftLabel != null) {
                 text.color = theme.keySubText
-                text.textSize = rect.height() * 0.24f
+                text.textSize = minOf(rect.height() * 0.24f, 12 * dp)
                 c.drawText(k.shiftLabel, rect.left + rect.width() * 0.22f, rect.top + rect.height() * 0.3f, text)
             }
             if (k.mod != null && mods.state(k.mod) == ModState.LOCKED) {
@@ -135,6 +135,21 @@ class KeyboardView(ctx: Context, private val mods: Modifiers, private val listen
             MotionEvent.ACTION_CANCEL -> { pressed.keys.toList().forEach { release(it) } }
         }
         return true
+    }
+
+    // the keyboard can be hidden or turned off while a key is held: stop repeating
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        repeatTasks.values.forEach { handler.removeCallbacks(it) }
+        repeatTasks.clear(); pressed.clear()
+    }
+
+    /** Fit a label inside its key: by height, capped in dp, and shrunk if too wide. */
+    private fun fitText(label: String, rect: RectF, heightShare: Float, maxDp: Float) {
+        text.textSize = minOf(rect.height() * heightShare, maxDp * dp)
+        val w = text.measureText(label)
+        val room = rect.width() * 0.82f
+        if (w > room && w > 0f) text.textSize *= room / w
     }
 
     private fun release(id: Int) {

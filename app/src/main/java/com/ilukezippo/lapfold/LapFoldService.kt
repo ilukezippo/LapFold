@@ -18,6 +18,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 
+private fun Int.within(lo: Int, hi: Int) = if (hi < lo) lo else coerceIn(lo, hi)
+
 class LapFoldService : AccessibilityService(), KeyListener, PadListener {
 
     companion object {
@@ -68,12 +70,27 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
         }
     }
 
+    private val displayListener = object : android.hardware.display.DisplayManager.DisplayListener {
+        override fun onDisplayAdded(id: Int) {}
+        override fun onDisplayRemoved(id: Int) {}
+        // fold / unfold / rotate / resolution change: refit to the new screen size
+        override fun onDisplayChanged(id: Int) { if (isOn) main.postDelayed({ safely { relayout() } }, 250) }
+    }
+
+    /** Never let a layout problem kill the service (Android then switches it off). */
+    private inline fun safely(block: () -> Unit) {
+        try { block() } catch (e: Exception) { CrashLog.write(this, e) }
+    }
+
     override fun onServiceConnected() {
+        CrashLog.install(this)
         instance = this
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         prefs = Prefs(this)
         gestures = GestureEngine(this)
+        runCatching { unregisterReceiver(toggleReceiver) }
         registerReceiver(toggleReceiver, IntentFilter(ACTION_TOGGLE), RECEIVER_NOT_EXPORTED)
+        getSystemService(android.hardware.display.DisplayManager::class.java).registerDisplayListener(displayListener, main)
         createChannel()
         updateNotification()
         TileService.requestListeningState(this, ComponentName(this, ToggleTileService::class.java))
@@ -82,6 +99,7 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
     override fun onInterrupt() {}
 
     override fun onUnbind(intent: Intent?): Boolean {
+        runCatching { getSystemService(android.hardware.display.DisplayManager::class.java).unregisterDisplayListener(displayListener) }
         turnOff()
         runCatching { unregisterReceiver(toggleReceiver) }
         getSystemService(NotificationManager::class.java).cancel(NOTIF_ID)
@@ -102,7 +120,11 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
         isOn = true
         mods.clear()
         softKeyboardController.setShowMode(SHOW_MODE_HIDDEN)   // keep Gboard out of the way
-        buildOverlays()
+        try { buildOverlays() } catch (e: Exception) {
+            CrashLog.write(this, e); isOn = true; turnOff()
+            Toast.makeText(this, "LapFold couldn't open the keyboard. Details in the app.", Toast.LENGTH_LONG).show()
+            return
+        }
         afterStateChange()
         if (split && prefs.autoSplit) startSplit()
     }
@@ -214,7 +236,7 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
     fun setPane(r: Rect?) {
         if (r == pane) return
         pane = r
-        if (isOn) relayout()
+        if (isOn) safely { relayout() }
     }
 
     fun applyTheme() {
@@ -250,7 +272,7 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
         val h = (s.height() * l.heightPct / 100f).toInt().coerceAtMost(u.bottom - s.top)
         prefs.floatPos?.let { (x, y) ->
             // moved by hand: keep its spot, but stay on screen
-            val fx = x.coerceIn(s.left, s.right - w); val fy = y.coerceIn(s.top, u.bottom - h)
+            val fx = x.within(s.left, s.right - w); val fy = y.within(s.top, u.bottom - h)
             return Rect(fx, fy, fx + w, fy + h)
         }
         val p = pane
@@ -385,14 +407,16 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
             val root = panel ?: return@setOnTouchListener false
             val lp = root.layoutParams as WindowManager.LayoutParams
             when (e.actionMasked) {
-                MotionEvent.ACTION_DOWN -> { startX = e.rawX; startY = e.rawY; winX = lp.x; winY = lp.y; moving = false }
+                MotionEvent.ACTION_DOWN -> { startX = e.rawX; startY = e.rawY; winX = lp.x; winY = lp.y; moving = false
+                    // if it's still docked, start from where it is drawn now
+                    if (lp.gravity != (Gravity.TOP or Gravity.START)) { winX = 0; winY = 0 } }
                 MotionEvent.ACTION_MOVE -> {
                     val dx = e.rawX - startX; val dy = e.rawY - startY
                     if (!moving && Math.hypot(dx.toDouble(), dy.toDouble()) > 12 * resources.displayMetrics.density) moving = true
                     if (moving) {
                         val s = screen()
-                        lp.x = (winX + dx).toInt().coerceIn(s.left, s.right - lp.width)
-                        lp.y = (winY + dy).toInt().coerceIn(s.top, s.bottom - lp.height)
+                        lp.x = (winX + dx).toInt().within(s.left, s.right - lp.width)
+                        lp.y = (winY + dy).toInt().within(s.top, s.bottom - lp.height)
                         runCatching { wm.updateViewLayout(root, lp) }
                     }
                 }
@@ -405,7 +429,7 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
                     }
                 }
             }
-            moving
+            true   // keep receiving the drag (returning false on DOWN made Move do nothing)
         }
     }
 
@@ -541,7 +565,7 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         // fold/unfold or rotation: wait for new window metrics, then refit
-        if (isOn) main.postDelayed({ relayout() }, 350)
+        if (isOn) main.postDelayed({ safely { relayout() } }, 350)
     }
 
     private fun placePointer() {

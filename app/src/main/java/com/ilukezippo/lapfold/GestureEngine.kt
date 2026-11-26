@@ -29,10 +29,15 @@ class GestureEngine(private val svc: AccessibilityService) {
 
     private fun single(x: Float, y: Float, dur: Long, fingers: Int, spread: Float) {
         cancel()
-        val b = GestureDescription.Builder()
-        for (o in offs(fingers, spread)) b.addStroke(StrokeDescription(Path().apply { moveTo(x + o, y) }, 0, dur))
-        svc.dispatchGesture(b.build(), null, null)
+        runCatching {
+            val b = GestureDescription.Builder()
+            for (o in offs(fingers, spread)) b.addStroke(StrokeDescription(Path().apply { moveTo(pos(x + o), pos(y)) }, 0, dur))
+            svc.dispatchGesture(b.build(), null, null)
+        }
     }
+
+    /** Android rejects gestures with negative coordinates (and would crash the service). */
+    private fun pos(v: Float) = maxOf(0f, v)
 
     private fun offs(fingers: Int, spread: Float) =
         if (fingers <= 1) listOf(0f) else listOf(-spread / 2, spread / 2)
@@ -41,8 +46,10 @@ class GestureEngine(private val svc: AccessibilityService) {
         cancel()
         offsets = offs(fingers, spread)
         lastX = x; lastY = y; ending = false
-        strokes = offsets.map { o -> StrokeDescription(Path().apply { moveTo(x + o, y) }, 0, seg, true) }
-        send(strokes!!)
+        strokes = try {
+            offsets.map { o -> StrokeDescription(Path().apply { moveTo(pos(x + o), pos(y)) }, 0, seg, true) }
+        } catch (e: Exception) { null }
+        strokes?.let { send(it) }
     }
 
     fun move(x: Float, y: Float) {
@@ -70,7 +77,7 @@ class GestureEngine(private val svc: AccessibilityService) {
         val next = try {
             ss.mapIndexed { i, s ->
                 val o = offsets[i]
-                s.continueStroke(Path().apply { moveTo(lastX + o, lastY); lineTo(tx + o, ty) }, 0, seg, cont)
+                s.continueStroke(Path().apply { moveTo(pos(lastX + o), pos(lastY)); lineTo(pos(tx + o), pos(ty)) }, 0, seg, cont)
             }
         } catch (e: Exception) { cancel(); return }
         lastX = tx; lastY = ty
@@ -83,7 +90,7 @@ class GestureEngine(private val svc: AccessibilityService) {
         busy = true
         val b = GestureDescription.Builder()
         ss.forEach { b.addStroke(it) }
-        val ok = svc.dispatchGesture(b.build(),
+        val ok = try { svc.dispatchGesture(b.build(),
             object : AccessibilityService.GestureResultCallback() {
                 override fun onCompleted(g: GestureDescription) {
                     busy = false
@@ -91,7 +98,7 @@ class GestureEngine(private val svc: AccessibilityService) {
                     if (strokes != null) flush()
                 }
                 override fun onCancelled(g: GestureDescription) { busy = false; strokes = null }
-            }, null)
+            }, null) } catch (e: Exception) { false }
         if (!ok) { busy = false; strokes = null }
     }
 }

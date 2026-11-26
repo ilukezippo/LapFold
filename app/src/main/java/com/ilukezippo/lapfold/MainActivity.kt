@@ -68,6 +68,7 @@ class MainActivity : Activity() {
         setTheme(if (prefs.dark) android.R.style.Theme_DeviceDefault_NoActionBar
                  else android.R.style.Theme_DeviceDefault_Light_NoActionBar)
         super.onCreate(b)
+        CrashLog.install(this)
         c = colors(prefs.dark)
         current = this
         isPane = intent.getBooleanExtra(EXTRA_PANE, false)
@@ -289,13 +290,34 @@ class MainActivity : Activity() {
         setup.addView(text("Set up", 16f, bold = true))
         setup.addView(text(
             "1. Tap the button and turn on LapFold.\n" +
-            "2. If the switch is blocked: Settings → Apps → LapFold → ⋮ → Allow restricted settings, then try again.",
+            "2. If the switch is blocked: Settings → Apps → LapFold → ⋮ → Allow restricted settings, then try again.\n" +
+            "3. Already on but LapFold says Setup needed? Android stopped it: turn it off and on again.",
             14f, c.sub), lp(6))
         setup.addView(button("Open Accessibility settings", true) {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }, lp(14))
         setupCard = setup
         col.addView(setup, lp(12))
+
+        // last error, so problems can be reported instead of LapFold silently stopping
+        CrashLog.read(this)?.let { err ->
+            val box = card()
+            box.addView(text("LapFold hit a problem", 16f, bold = true))
+            box.addView(text("If the keyboard stopped working, turn LapFold off and on again in Accessibility. " +
+                "Copy the details and send them to the developer.", 14f, c.sub), lp(6))
+            box.addView(text(err.lines().take(6).joinToString("\n"), 12f, c.sub).apply {
+                typeface = Typeface.MONOSPACE }, lp(8))
+            val btns = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            btns.addView(button("Copy details", true) {
+                val cm = getSystemService(android.content.ClipboardManager::class.java)
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("LapFold error", err))
+                Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show()
+            })
+            btns.addView(button("Dismiss", false) { CrashLog.clear(this); recreate() },
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { leftMargin = px(10) })
+            box.addView(btns, lp(12))
+            col.addView(box, lp(12))
+        }
 
         // appearance
         col.addView(section("Appearance"), lp(24))
