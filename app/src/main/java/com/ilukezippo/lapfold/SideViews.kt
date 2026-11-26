@@ -61,9 +61,9 @@ class ScrollStripView(ctx: Context, private val listener: PadListener) : View(ct
     }
 }
 
-/** Back and Home buttons, stacked, to the right of the trackpad. */
+/** A vertical stack of buttons to the right of the trackpad. */
 @SuppressLint("ViewConstructor")
-class NavButtonsView(ctx: Context, private val onBack: () -> Unit, private val onHome: () -> Unit) : View(ctx) {
+class NavButtonsView(ctx: Context, private val buttons: List<Pair<String, () -> Unit>>) : View(ctx) {
     var theme: Theme = Theme.DARK
         set(v) { field = v; invalidate() }
     private val dp = resources.displayMetrics.density
@@ -72,20 +72,21 @@ class NavButtonsView(ctx: Context, private val onBack: () -> Unit, private val o
     private var pressed = -1
     private val gap get() = 6 * dp
     private fun rect(i: Int): RectF {
-        val h = (height - gap) / 2f
+        val n = buttons.size
+        val h = (height - gap * (n - 1)) / n
         val top = i * (h + gap)
         return RectF(1f, top + 1f, width - 1f, top + h)
     }
+    private fun indexAt(y: Float) = (0 until buttons.size).firstOrNull { rect(it).let { r -> y >= r.top - gap && y <= r.bottom + gap } } ?: -1
 
     override fun onDraw(c: Canvas) {
-        val labels = listOf("◀  Back", "⌂  Home")
-        for (i in 0..1) {
+        for (i in buttons.indices) {
             val r = rect(i)
             paint.color = if (pressed == i) theme.keyPressed else theme.keyBg
             c.drawRoundRect(r, 8 * dp, 8 * dp, paint)
             text.color = theme.keyText
-            text.textSize = minOf(r.height() * 0.30f, 16 * dp)
-            c.drawText(labels[i], r.centerX(), r.centerY() - (text.descent() + text.ascent()) / 2, text)
+            text.textSize = minOf(r.height() * 0.34f, 15 * dp, r.width() / 6.5f)
+            c.drawText(buttons[i].first, r.centerX(), r.centerY() - (text.descent() + text.ascent()) / 2, text)
         }
     }
 
@@ -93,11 +94,11 @@ class NavButtonsView(ctx: Context, private val onBack: () -> Unit, private val o
     override fun onTouchEvent(e: MotionEvent): Boolean {
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                pressed = if (e.y < height / 2f) 0 else 1
+                pressed = indexAt(e.y)
                 performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY); invalidate()
             }
             MotionEvent.ACTION_UP -> {
-                if (pressed == 0) onBack() else if (pressed == 1) onHome()
+                if (pressed in buttons.indices) buttons[pressed].second()
                 pressed = -1; invalidate()
             }
             MotionEvent.ACTION_CANCEL -> { pressed = -1; invalidate() }

@@ -32,6 +32,8 @@ class KeyboardView(ctx: Context, private val mods: Modifiers, private val listen
         typeface = Typeface.create("sans-serif", Typeface.NORMAL)
     }
     private val dp = resources.displayMetrics.density
+    private val winIcon = BitmapFactory.decodeResource(resources, R.drawable.win_key)
+    private val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
 
     override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) = layoutKeys(w, h)
 
@@ -76,6 +78,17 @@ class KeyboardView(ctx: Context, private val mods: Modifiers, private val listen
                 paint.color = base
             }
             c.drawRoundRect(rect, r, r, paint)
+            if (k.id == "win") {   // Windows key: icon tinted to the key text colour
+                iconPaint.colorFilter = PorterDuffColorFilter(if (active) Color.WHITE else theme.keyText, PorterDuff.Mode.SRC_IN)
+                val sz = minOf(rect.height(), rect.width()) * 0.42f
+                val dst = RectF(rect.centerX() - sz / 2, rect.centerY() - sz / 2, rect.centerX() + sz / 2, rect.centerY() + sz / 2)
+                c.drawBitmap(winIcon, null, dst, iconPaint)
+                if (k.mod != null && mods.state(k.mod) == ModState.LOCKED) {
+                    paint.color = Color.WHITE
+                    c.drawCircle(rect.right - 6 * dp, rect.top + 6 * dp, 2.5f * dp, paint)
+                }
+                continue
+            }
             val label = KeyLayout.labelFor(k, shift, mods.caps)
             text.color = if (active) Color.WHITE else theme.keyText
             text.textSize = when {

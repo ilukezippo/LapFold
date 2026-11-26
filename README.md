@@ -56,8 +56,11 @@ You don't have to switch keyboards: **Gboard stays your default**, and LapFold o
 | **Two-finger tap** or the right button | Right-click (long press) |
 | **Two-finger drag** or slide the **strip on the left** | Scroll, like a mouse wheel |
 | Hold the **left button** and move | Drag |
-| Tap **⌄** at the top of the keyboard | Slides the keyboard away; tap the **⌃ LapFold** tab to bring it back |
-| **Back** and **Home** on the right | The same as the navigation bar, which stays reachable too |
+| Tap **⌄** at the top of the keyboard | Slides the keyboard away; tap the **⌃** tab on the right edge to bring it back |
+| Drag **⠿ Move** on the keyboard's top bar | Moves the keyboard anywhere; **✎ Edit → Dock** puts it back |
+| Tap **✎ Edit** | Change the height and width of the keyboard, trackpad, scroll strip and buttons |
+| **Back / Forward** next to the trackpad | Mouse back and forward buttons (Alt + ← / →) |
+| **PrtSc** | Print Screen to the PC in Splashtop, or a phone screenshot otherwise |
 
 Turn it off from the notification, the tile, or the **Off** key. Your app goes back to full screen.
 
@@ -65,7 +68,8 @@ Turn it off from the notification, the tile, or the **Off** key. Your app goes b
 
 ## What's new in 1.0.0
 
-- First release: keyboard, trackpad, scroll strip, Back and Home
+- First release: keyboard, trackpad, scroll strip, mouse Back / Forward and Print Screen
+- Move the keyboard anywhere, resize every part in Edit mode
 - Auto split screen, hide/show with a slide animation
 - Dark and light themes for the keyboard and the app
 - Update check on startup and in Settings
@@ -87,7 +91,8 @@ Everything that changed is in the [changelog](CHANGELOG.md).
 
 - **Full Windows layout:** Esc, F1–F12, Del, number row with symbols, Tab, Caps Lock, both Shifts, Ctrl, Win, Alt, arrow keys, and key repeat when you hold a key
 - **Trackpad** with an on-screen pointer, left and right buttons, tap to click, two-finger scroll and drag
-- **Mouse-wheel strip** for quick scrolling, plus **Back** and **Home** buttons
+- **Mouse-wheel strip** for quick scrolling, plus mouse **Back / Forward** and **Print Screen** buttons
+- **Move it and resize it:** drag the keyboard anywhere, and change the size of every part in Edit mode
 - **Works in any app**, and Gboard stays your default keyboard — nothing to switch back
 - **Auto split screen:** your app on top, LapFold below, back to full screen when you turn it off
 - **Turn it on any time:** notification button, Quick Settings tile, or open the app. No hinge angle needed
@@ -132,7 +137,8 @@ KeyboardView.kt       Windows-style keyboard drawn on a canvas
 KeyLayout.kt          the key layout, labels and key codes
 Modifiers.kt          sticky Shift / Ctrl / Alt / Win
 TrackpadView.kt       trackpad gestures: move, click, right-click, scroll, drag
-SideViews.kt          scroll strip and Back / Home buttons
+SideViews.kt          scroll strip and the Back / Forward / PrtSc buttons
+PanelLayout.kt        sizes you can change in Edit mode
 GestureEngine.kt      taps and continuous drags injected at the pointer
 PointerView.kt        the on-screen pointer
 MainActivity.kt       settings screen, also the bottom pane in split screen

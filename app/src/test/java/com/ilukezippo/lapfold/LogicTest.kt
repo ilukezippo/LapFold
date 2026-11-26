@@ -76,3 +76,21 @@ class UpdateTest {
         assertFalse(UpdateChecker.isNewer("garbage", "1.0.0"))
     }
 }
+
+class PanelLayoutTest {
+    @Test fun defaultsAreLaptopLike() {
+        val d = PanelLayout.DEFAULT
+        assertEquals(50, d.heightPct); assertEquals(100, d.widthPct); assertEquals(62, d.keyboardPct)
+    }
+    @Test fun clampKeepsValuesUsable() {
+        val c = PanelLayout(heightPct = 5, widthPct = 300, keyboardPct = 99, trackpadPct = 0, stripPct = 50, buttonsPct = 1).clamped()
+        assertEquals(PanelLayout(25, 100, 85, 20, 15, 6), c)
+    }
+    @Test fun editorFieldsRoundTrip() {
+        var l = PanelLayout.DEFAULT
+        for ((_, range, acc) in PanelLayout.FIELDS) {
+            l = acc.second(l, range.first)
+            assertEquals(range.first, acc.first(l))
+        }
+    }
+}

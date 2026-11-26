@@ -17,6 +17,19 @@ class Prefs(ctx: Context) {
     var remoteMode: Int
         get() = sp.getInt("remote", 0)
         set(v) = sp.edit().putInt("remote", v).apply()
+    var layout: PanelLayout
+        get() = PanelLayout(
+            sp.getInt("l_h", 50), sp.getInt("l_w", 100), sp.getInt("l_kb", 62),
+            sp.getInt("l_pad", 45), sp.getInt("l_strip", 6), sp.getInt("l_btn", 13),
+        ).clamped()
+        set(v) { val c = v.clamped(); sp.edit().putInt("l_h", c.heightPct).putInt("l_w", c.widthPct)
+            .putInt("l_kb", c.keyboardPct).putInt("l_pad", c.trackpadPct).putInt("l_strip", c.stripPct)
+            .putInt("l_btn", c.buttonsPct).apply() }
+    /** Top-left of the panel when moved by hand; null = docked at the bottom. */
+    var floatPos: Pair<Int, Int>?
+        get() = if (sp.contains("f_x")) Pair(sp.getInt("f_x", 0), sp.getInt("f_y", 0)) else null
+        set(v) { if (v == null) sp.edit().remove("f_x").remove("f_y").apply()
+                 else sp.edit().putInt("f_x", v.first).putInt("f_y", v.second).apply() }
     var naturalScroll: Boolean
         get() = sp.getBoolean("natural", false)
         set(v) = sp.edit().putBoolean("natural", v).apply()

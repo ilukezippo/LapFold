@@ -42,6 +42,8 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
     private var scrollStrip: ScrollStripView? = null
     private var navButtons: NavButtonsView? = null
     private var arrow: TextView? = null
+    private var barLabels: List<TextView> = emptyList()
+    private var padRowView: LinearLayout? = null
     private var showTab: TextView? = null
     var collapsed = false
         private set
@@ -121,6 +123,7 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
     fun turnOff() {
         if (!isOn) return
         isOn = false
+        closeEditor()
         // leave split screen: closing LapFold's pane gives the other app the full screen again
         MainActivity.current?.let { if (it.isInMultiWindowMode && it.isPane) it.finishAndRemoveTask() }
         gestures.cancel()
@@ -130,7 +133,7 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
             pointer?.let { runCatching { wm.removeView(it) } }
         }
         showTab?.let { runCatching { wm.removeView(it) } }
-        showTab = null; arrow = null; collapsed = false
+        showTab = null; arrow = null; barLabels = emptyList(); padRowView = null; collapsed = false
         panel = null; pointer = null; keyboard = null; trackpad = null; scrollStrip = null; navButtons = null
         afterStateChange()
     }
@@ -144,6 +147,7 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
     fun collapse() {
         if (!isOn || collapsed) return
         collapsed = true
+        closeEditor()
         gestures.cancel()
         pointer?.let { runCatching { wm.removeView(it) } }
         // slide the keyboard down, then remove its window
@@ -156,7 +160,7 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
         runCatching { softKeyboardController.setShowMode(SHOW_MODE_AUTO) }
         val t = if (prefs.dark) Theme.DARK else Theme.LIGHT
         val tab = showTab ?: TextView(this).apply {
-            text = "⌃  LapFold"; textSize = 14f; gravity = Gravity.CENTER
+            text = "⌃"; textSize = 22f; gravity = Gravity.CENTER
             setOnClickListener { expand() }
         }.also { showTab = it }
         styleTab(tab, t)
@@ -186,18 +190,22 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
         afterStateChange()
     }
 
+    /** The "show" tab sits on the right edge at the hinge, clear of Gboard's keys. */
     private fun tabRect(): Rect {
         val u = usable()
+        val s = screen()
         val d = resources.displayMetrics.density
-        val w = (120 * d).toInt(); val h = (34 * d).toInt()
-        val left = u.centerX() - w / 2
-        return Rect(left, u.bottom - h - (6 * d).toInt(), left + w, u.bottom - (6 * d).toInt())
+        val w = (46 * d).toInt(); val h = (64 * d).toInt()
+        val top = s.top + s.height() / 2 - h - (8 * d).toInt()
+        return Rect(u.right - w, top, u.right, top + h)
     }
 
     private fun styleTab(v: TextView, t: Theme) {
         v.setTextColor(t.keyText)
         v.background = android.graphics.drawable.GradientDrawable().apply {
-            setColor(t.keyBg); cornerRadius = 17 * resources.displayMetrics.density
+            setColor(t.keyBg)
+            val r = 14 * resources.displayMetrics.density
+            cornerRadii = floatArrayOf(r, r, 0f, 0f, 0f, 0f, r, r)   // rounded on the left, flat against the edge
             setStroke((1 * resources.displayMetrics.density).toInt(), t.padBorder)
         }
         v.elevation = 6 * resources.displayMetrics.density
@@ -216,6 +224,7 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
         scrollStrip?.theme = t
         navButtons?.theme = t
         arrow?.setTextColor(t.keySubText)
+        barLabels.forEach { it.setTextColor(t.keySubText) }
         showTab?.let { styleTab(it, t) }
         panel?.setBackgroundColor(t.panelBg)
     }
@@ -236,12 +245,23 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
     private fun panelRect(): Rect {
         val s = screen()
         val u = usable()
+        val l = prefs.layout
+        val w = (u.width() * l.widthPct / 100f).toInt()
+        val h = (s.height() * l.heightPct / 100f).toInt().coerceAtMost(u.bottom - s.top)
+        prefs.floatPos?.let { (x, y) ->
+            // moved by hand: keep its spot, but stay on screen
+            val fx = x.coerceIn(s.left, s.right - w); val fy = y.coerceIn(s.top, u.bottom - h)
+            return Rect(fx, fy, fx + w, fy + h)
+        }
         val p = pane
         // use LapFold's split pane only when it's the lower half (top/bottom split)
         if (p != null && p.width() > 0 && p.height() > 0 && s.contains(p) && p.top > s.top + s.height() * 0.25f) {
             val r = Rect(p); r.intersect(u); return r
         }
-        return Rect(u.left, s.top + s.height() / 2, u.right, u.bottom)   // bottom half = below the hinge
+        // docked: Height is measured from the bottom of the screen, so 50% starts right at the hinge
+        val left = u.left + (u.width() - w) / 2
+        val top = (s.top + s.height() * (100 - l.heightPct) / 100f).toInt().coerceAtMost(u.bottom - 1)
+        return Rect(left, top, left + w, u.bottom)
     }
 
     private fun pointerArea(panelR: Rect): Area {
@@ -270,44 +290,59 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
 
     private fun buildOverlays() {
         val t = if (prefs.dark) Theme.DARK else Theme.LIGHT
+        val d = resources.displayMetrics.density
         val kb = KeyboardView(this, mods, this).apply { theme = t }
         val tp = TrackpadView(this, this).apply { theme = t }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(t.panelBg)
-            val pad = (6 * resources.displayMetrics.density).toInt()
-            setPadding(pad, pad, pad, pad)
+            val pad = (6 * d).toInt()
+            setPadding(pad, 0, pad, pad)
         }
-        val d0 = resources.displayMetrics.density
+
+        // handle bar: drag it to move the keyboard; ✎ = edit sizes, ⌄ = hide
+        val bar = FrameLayout(this)
+        val editBtn = TextView(this).apply {
+            text = "✎  Edit"; textSize = 13f; gravity = Gravity.CENTER
+            setTextColor(t.keySubText); setPadding((12 * d).toInt(), 0, (12 * d).toInt(), 0)
+            setOnClickListener { toggleEditor() }
+        }
         val hideArrow = TextView(this).apply {
             text = "⌄"; textSize = 22f; gravity = Gravity.CENTER
             setTextColor(t.keySubText); includeFontPadding = false
             setOnClickListener { collapse() }
         }
-        root.addView(hideArrow, LinearLayout.LayoutParams((90 * d0).toInt(), (24 * d0).toInt()).apply { gravity = Gravity.CENTER_HORIZONTAL })
-        arrow = hideArrow
+        val grip = TextView(this).apply {
+            text = "⠿  Move"; textSize = 13f; gravity = Gravity.CENTER
+            setTextColor(t.keySubText); setPadding((12 * d).toInt(), 0, (12 * d).toInt(), 0)
+        }
+        bar.addView(editBtn, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.START))
+        bar.addView(hideArrow, FrameLayout.LayoutParams((90 * d).toInt(), FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER_HORIZONTAL))
+        bar.addView(grip, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.END))
+        attachMover(bar); attachMover(grip)
+        root.addView(bar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (30 * d).toInt()))
+        arrow = hideArrow; barLabels = listOf(editBtn, grip)
+
         root.addView(kb, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 0.62f))
-        val d = resources.displayMetrics.density
         val strip = ScrollStripView(this, this).apply { theme = t }
-        val nav = NavButtonsView(this,
-            onBack = { performGlobalAction(GLOBAL_ACTION_BACK) },
-            onHome = { performGlobalAction(GLOBAL_ACTION_HOME) }).apply { theme = t }
+        val nav = NavButtonsView(this, listOf(
+            "◀ Back" to { mouseBack() },
+            "Forward ▶" to { mouseForward() },
+            "PrtSc" to { printScreen() },
+        )).apply { theme = t }
         val padRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(0, (8 * d).toInt(), 0, 0)
         }
-        val gap = (10 * d).toInt()
-        padRow.addView(strip, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.06f).apply { rightMargin = gap })
-        padRow.addView(tp, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.45f))
-        padRow.addView(nav, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.13f).apply { leftMargin = gap })
-        padRow.weightSum = 0.64f
+        padRow.addView(strip); padRow.addView(tp); padRow.addView(nav)
         root.addView(padRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 0.38f))
-        scrollStrip = strip; navButtons = nav
+        scrollStrip = strip; navButtons = nav; padRowView = padRow
 
+        panel = root; keyboard = kb; trackpad = tp
+        applyLayoutWeights()
         val pr = panelRect()
         wm.addView(root, overlayParams(pr, true))
-        panel = root; keyboard = kb; trackpad = tp
 
         val pv = PointerView(this)
         area = pointerArea(pr)
@@ -319,6 +354,171 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
         placePointer()
         updatePointerVisibility()
     }
+
+    /** Apply the Edit-mode sizes to the keyboard / trackpad row. */
+    private fun applyLayoutWeights() {
+        val l = prefs.layout
+        val d = resources.displayMetrics.density
+        val gap = (10 * d).toInt()
+        keyboard?.let { (it.layoutParams as LinearLayout.LayoutParams).weight = l.keyboardPct / 100f; it.requestLayout() }
+        padRowView?.let { row ->
+            (row.layoutParams as LinearLayout.LayoutParams).weight = 1f - l.keyboardPct / 100f
+            row.weightSum = 1f
+            fun lp(pct: Int, left: Int = 0, right: Int = 0) =
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, pct / 100f).apply { leftMargin = left; rightMargin = right }
+            // centre the three parts like a laptop: empty space split on both sides
+            val used = l.stripPct + l.trackpadPct + l.buttonsPct
+            row.weightSum = maxOf(100, used) / 100f
+            scrollStrip?.layoutParams = lp(l.stripPct, right = gap)
+            trackpad?.layoutParams = lp(l.trackpadPct)
+            navButtons?.layoutParams = lp(l.buttonsPct, left = gap)
+            row.requestLayout()
+        }
+    }
+
+    // ---------- moving the keyboard ----------
+
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
+    private fun attachMover(v: View) {
+        var startX = 0f; var startY = 0f; var winX = 0; var winY = 0; var moving = false
+        v.setOnTouchListener { _, e ->
+            val root = panel ?: return@setOnTouchListener false
+            val lp = root.layoutParams as WindowManager.LayoutParams
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> { startX = e.rawX; startY = e.rawY; winX = lp.x; winY = lp.y; moving = false }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = e.rawX - startX; val dy = e.rawY - startY
+                    if (!moving && Math.hypot(dx.toDouble(), dy.toDouble()) > 12 * resources.displayMetrics.density) moving = true
+                    if (moving) {
+                        val s = screen()
+                        lp.x = (winX + dx).toInt().coerceIn(s.left, s.right - lp.width)
+                        lp.y = (winY + dy).toInt().coerceIn(s.top, s.bottom - lp.height)
+                        runCatching { wm.updateViewLayout(root, lp) }
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (moving) {
+                        prefs.floatPos = Pair(lp.x, lp.y)
+                        area = pointerArea(Rect(lp.x, lp.y, lp.x + lp.width, lp.y + lp.height))
+                        val (cx2, cy2) = PointerMath.clamp(px, py, area); px = cx2; py = cy2; placePointer()
+                        editor?.let { positionEditor() }
+                    }
+                }
+            }
+            moving
+        }
+    }
+
+    // ---------- edit mode ----------
+
+    private var editor: View? = null
+
+    private fun toggleEditor() { if (editor != null) closeEditor() else openEditor() }
+
+    private fun closeEditor() {
+        editor?.let { runCatching { wm.removeView(it) } }
+        editor = null
+    }
+
+    private fun editorRect(): Rect {
+        val d = resources.displayMetrics.density
+        val s = screen()
+        val p = (panel?.layoutParams as? WindowManager.LayoutParams)
+        val w = minOf((380 * d).toInt(), s.width() - (16 * d).toInt())
+        val h = (430 * d).toInt()
+        val panelTop = p?.y ?: (s.top + s.height() / 2)
+        val top = if (panelTop - h - (8 * d).toInt() >= s.top) panelTop - h - (8 * d).toInt() else s.top + (8 * d).toInt()
+        val left = s.centerX() - w / 2
+        return Rect(left, top, left + w, top + h)
+    }
+
+    private fun positionEditor() {
+        val v = editor ?: return
+        val r = editorRect()
+        (v.layoutParams as WindowManager.LayoutParams).apply { x = r.left; y = r.top; width = r.width(); height = r.height() }
+            .also { runCatching { wm.updateViewLayout(v, it) } }
+    }
+
+    private fun openEditor() {
+        val t = if (prefs.dark) Theme.DARK else Theme.LIGHT
+        val d = resources.displayMetrics.density
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(t.panelBg); cornerRadius = 12 * d; setStroke((1 * d).toInt(), t.padBorder)
+            }
+            elevation = 10 * d
+            setPadding((16 * d).toInt(), (12 * d).toInt(), (16 * d).toInt(), (12 * d).toInt())
+        }
+        card.addView(TextView(this).apply { text = "Edit layout"; textSize = 17f; setTextColor(t.keyText); typeface = android.graphics.Typeface.DEFAULT_BOLD })
+        for ((label, range, acc) in PanelLayout.FIELDS) {
+            val (get, set) = acc
+            val value = TextView(this).apply { textSize = 13f; setTextColor(t.keySubText) }
+            val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            head.addView(TextView(this).apply { text = label; textSize = 14f; setTextColor(t.keyText) },
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            head.addView(value)
+            card.addView(head, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = (8 * d).toInt() })
+            val cur = get(prefs.layout)
+            value.text = "$cur%"
+            card.addView(android.widget.SeekBar(this).apply {
+                max = range.last - range.first; progress = cur - range.first
+                setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(sb: android.widget.SeekBar, p: Int, fromUser: Boolean) {
+                        if (!fromUser) return
+                        val v = range.first + p
+                        value.text = "$v%"
+                        prefs.layout = set(prefs.layout, v)
+                        applyLayoutWeights(); relayout()
+                    }
+                    override fun onStartTrackingTouch(sb: android.widget.SeekBar) {}
+                    override fun onStopTrackingTouch(sb: android.widget.SeekBar) {}
+                })
+            })
+        }
+        val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END }
+        fun action(label: String, accent: Boolean, onClick: () -> Unit) = TextView(this).apply {
+            text = label; textSize = 14f; gravity = Gravity.CENTER
+            setTextColor(if (accent) android.graphics.Color.WHITE else t.keyText)
+            background = android.graphics.drawable.GradientDrawable().apply { setColor(if (accent) t.accent else t.keyBg); cornerRadius = 6 * d }
+            setPadding((14 * d).toInt(), (8 * d).toInt(), (14 * d).toInt(), (8 * d).toInt())
+            setOnClickListener { onClick() }
+        }
+        val gapLp = { LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { leftMargin = (8 * d).toInt() } }
+        actions.addView(action("Reset", false) {
+            prefs.layout = PanelLayout.DEFAULT; prefs.floatPos = null
+            applyLayoutWeights(); relayout(); closeEditor(); openEditor()
+        }, gapLp())
+        actions.addView(action("Dock", false) { prefs.floatPos = null; relayout(); positionEditor() }, gapLp())
+        actions.addView(action("Done", true) { closeEditor() }, gapLp())
+        card.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = (12 * d).toInt() })
+        editor = card
+        runCatching { wm.addView(card, overlayParams(editorRect(), true)) }
+    }
+
+    // ---------- mouse side buttons ----------
+
+    /** Send a key combo to the focused text box; false if nothing is focused. */
+    private fun sendCombo(code: Int, extra: List<Mod> = emptyList()): Boolean {
+        val ic = inputMethod?.currentInputConnection ?: return false
+        val now = SystemClock.uptimeMillis()
+        fun ev(action: Int, c: Int, m: Int) = KeyEvent(now, now, action, c, 0, m,
+            KeyCharacterMap.VIRTUAL_KEYBOARD, 0, KeyEvent.FLAG_SOFT_KEYBOARD or KeyEvent.FLAG_KEEP_TOUCH_MODE)
+        var m = 0
+        for (mod in extra) { m = m or mod.meta; ic.sendKeyEvent(ev(KeyEvent.ACTION_DOWN, modCode(mod), m)) }
+        ic.sendKeyEvent(ev(KeyEvent.ACTION_DOWN, code, m)); ic.sendKeyEvent(ev(KeyEvent.ACTION_UP, code, m))
+        for (mod in extra.reversed()) { m = m and mod.meta.inv(); ic.sendKeyEvent(ev(KeyEvent.ACTION_UP, modCode(mod), m)) }
+        return true
+    }
+
+    // Mouse Back / Forward do what Alt+Left / Alt+Right do on Windows (browser, Explorer…).
+    private fun mouseBack() { if (!sendCombo(KeyEvent.KEYCODE_DPAD_LEFT, listOf(Mod.ALT))) performGlobalAction(GLOBAL_ACTION_BACK) }
+    private fun mouseForward() {
+        if (!sendCombo(KeyEvent.KEYCODE_DPAD_RIGHT, listOf(Mod.ALT)))
+            Toast.makeText(this, "Tap a text box (or Splashtop's keyboard button) first", Toast.LENGTH_SHORT).show()
+    }
+    // Print Screen goes to the PC in Splashtop; with nothing focused, takes a phone screenshot.
+    private fun printScreen() { if (!sendCombo(KeyEvent.KEYCODE_SYSRQ)) performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT) }
 
     private fun relayout() {
         if (collapsed) {
