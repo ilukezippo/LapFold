@@ -26,6 +26,8 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
         const val ACTION_TOGGLE = "com.ilukezippo.lapfold.TOGGLE"
         private const val CHANNEL = "lapfold"
         private const val NOTIF_ID = 1
+        /** Apps whose own trackpad mode LapFold drives (package prefixes). */
+        val REMOTE_APPS = listOf("com.splashtop")
     }
 
     private lateinit var wm: WindowManager
@@ -75,7 +77,6 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
         TileService.requestListeningState(this, ComponentName(this, ToggleTileService::class.java))
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
     override fun onInterrupt() {}
 
     override fun onUnbind(intent: Intent?): Boolean {
@@ -316,6 +317,7 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
         wm.addView(pv, pp)
         pointer = pv
         placePointer()
+        updatePointerVisibility()
     }
 
     private fun relayout() {
@@ -393,6 +395,48 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
 
     // ---------- trackpad ----------
 
+    // Remote-desktop apps (Splashtop) draw their own mouse pointer. In "relay" mode the
+    // trackpad drives that pointer through the app's trackpad mode instead of LapFold's:
+    // finger movement is replayed as a relative drag, taps as taps, 2 fingers as 2 fingers.
+    private var foregroundPkg: String? = null
+    private val relay: Boolean
+        get() = when (prefs.remoteMode) {
+            1 -> true
+            2 -> false
+            else -> foregroundPkg?.let { p -> REMOTE_APPS.any { p.startsWith(it) } } == true
+        }
+    private val ignoredPkgs = setOf("com.android.systemui", "com.google.android.inputmethod.latin",
+        "com.samsung.android.honeyboard", "com.sec.android.app.launcher")
+
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+        val pkg = event.packageName?.toString() ?: return
+        if (pkg == packageName || pkg in ignoredPkgs) return
+        if (pkg != foregroundPkg) { foregroundPkg = pkg; updatePointerVisibility() }
+    }
+
+    fun updatePointerVisibility() {
+        pointer?.visibility = if (relay) View.INVISIBLE else View.VISIBLE
+    }
+
+    private val cx get() = area.left + area.width / 2
+    private val cy get() = area.top + area.height / 2
+    private val twoFingerSpread get() = 70 * resources.displayMetrics.density
+    private var relayDragging = false
+
+    /** Move the relayed finger; lift and re-centre when it nears the edge of the app area. */
+    private fun relayMove(dx: Float, dy: Float, fingers: Int) {
+        if (!gestures.active) gestures.begin(cx, cy, fingers, if (fingers > 1) twoFingerSpread else 0f)
+        val margin = 48 * resources.displayMetrics.density
+        val nx = gestures.x + dx; val ny = gestures.y + dy
+        if (nx < area.left + margin || nx > area.right - margin || ny < area.top + margin || ny > area.bottom - margin) {
+            gestures.end()
+            main.postDelayed({ if (isOn && !gestures.active) gestures.begin(cx, cy, fingers, if (fingers > 1) twoFingerSpread else 0f) }, 30)
+            return
+        }
+        gestures.move(nx, ny)
+    }
+
     private fun movePointer(dx: Float, dy: Float) {
         val s = prefs.speed
         val (nx, ny) = PointerMath.clamp(px + PointerMath.accel(dx, s), py + PointerMath.accel(dy, s), area)
@@ -401,22 +445,45 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
     }
 
     override fun onMove(dx: Float, dy: Float) {
+        if (relay) { relayMove(PointerMath.accel(dx, prefs.speed), PointerMath.accel(dy, prefs.speed), 1); return }
         movePointer(dx, dy)
         if (gestures.active) gestures.move(px, py)
     }
 
-    override fun onClick() = gestures.tap(px, py)
-    override fun onRightClick() = gestures.longPress(px, py)
+    override fun onFingerUp() {
+        if (relay && !relayDragging && gestures.active) gestures.end()
+    }
 
-    override fun onDragStart() { pointer?.held = true; gestures.begin(px, py) }
-    override fun onDragEnd() { pointer?.held = false; gestures.end() }
+    override fun onClick() = if (relay) gestures.tap(cx, cy) else gestures.tap(px, py)
+    override fun onRightClick() =
+        if (relay) gestures.tap(cx, cy, 2, twoFingerSpread) else gestures.longPress(px, py)
+
+    override fun onDragStart() {
+        if (relay) {
+            // trackpad-mode drag = tap, then touch again and move (double-tap-drag)
+            relayDragging = true
+            gestures.tap(cx, cy)
+            main.postDelayed({ if (isOn && relayDragging) gestures.begin(cx, cy) }, 90)
+            return
+        }
+        pointer?.held = true; gestures.begin(px, py)
+    }
+    override fun onDragEnd() {
+        relayDragging = false
+        pointer?.held = false; gestures.end()
+    }
 
     // scrolling = a finger dragged from the pointer position, clamped to the app area
+    // (relay mode: a two-finger drag, which remote-desktop apps turn into the mouse wheel)
     private var sx = 0f
     private var sy = 0f
-    override fun onScrollStart() { sx = px; sy = py; gestures.begin(sx, sy) }
+    override fun onScrollStart() {
+        if (relay) { gestures.begin(cx, cy, 2, twoFingerSpread); return }
+        sx = px; sy = py; gestures.begin(sx, sy)
+    }
     override fun onScroll(dx: Float, dy: Float) {
         val dir = if (prefs.naturalScroll) 1f else -1f
+        if (relay) { relayMove(dx * 1.6f * dir, dy * 1.6f * dir, 2); return }
         val (nx, ny) = PointerMath.clamp(sx + dx * 1.6f * dir, sy + dy * 1.6f * dir, area)
         if (nx == sx && ny == sy) return
         sx = nx; sy = ny

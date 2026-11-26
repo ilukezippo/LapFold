@@ -13,3 +13,4 @@ First release.
 - Gboard stays your default keyboard
 - Dark and light themes for the keyboard and the app
 - Update check on startup and in Settings
+- Remote desktop mode: the trackpad moves Splashtop's own mouse pointer

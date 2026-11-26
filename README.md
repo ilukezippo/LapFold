@@ -61,7 +61,7 @@ You don't have to switch keyboards: **Gboard stays your default**, and LapFold o
 
 Turn it off from the notification, the tile, or the **Off** key. Your app goes back to full screen.
 
-**Splashtop tip:** use Splashtop's touch mode, so clicks land exactly where LapFold's pointer is.
+**Splashtop:** switch Splashtop to its **trackpad mode**. LapFold notices Splashtop and drives Splashtop's own mouse pointer, so hover works: tap = click, two-finger tap = right-click, two-finger drag = scroll. (Settings → *Remote desktop mode*: Auto / Always / Off.)
 
 ## What's new in 1.0.0
 
@@ -93,6 +93,7 @@ Everything that changed is in the [changelog](CHANGELOG.md).
 - **Turn it on any time:** notification button, Quick Settings tile, or open the app. No hinge angle needed
 - **Hide and show** with a slide animation; the navigation bar stays reachable
 - **Dark and light themes** for the keyboard and the app
+- **Remote desktop mode:** with Splashtop on top, the trackpad moves Splashtop's own mouse pointer
 - **Pointer speed** and **natural scrolling** settings
 - **Updates built in:** checks this GitHub page when you open the app, and from *Check for updates* in Settings
 - **No computer, root or ADB needed.** No accounts, no ads, no telemetry — see the [privacy policy](PRIVACY.md)

@@ -13,6 +13,10 @@ class Prefs(ctx: Context) {
     var autoSplit: Boolean
         get() = sp.getBoolean("autosplit", true)
         set(v) = sp.edit().putBoolean("autosplit", v).apply()
+    /** 0 = auto (Splashtop), 1 = always, 2 = off */
+    var remoteMode: Int
+        get() = sp.getInt("remote", 0)
+        set(v) = sp.edit().putInt("remote", v).apply()
     var naturalScroll: Boolean
         get() = sp.getBoolean("natural", false)
         set(v) = sp.edit().putBoolean("natural", v).apply()

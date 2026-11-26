@@ -19,6 +19,8 @@ interface PadListener {
     fun onScrollEnd()
     fun onDragStart()
     fun onDragEnd()
+    /** All fingers lifted from the pad (called before any click). */
+    fun onFingerUp() {}
 }
 
 /** Laptop trackpad with left/right buttons along the bottom edge. */
@@ -133,6 +135,7 @@ class TrackpadView(ctx: Context, private val listener: PadListener) : View(ctx) 
             }
         }
         if (last.remove(id) == null) return
+        if (last.isEmpty() && !scrolling) listener.onFingerUp()
         if (last.isNotEmpty()) {
             // a finger lifted during a 2-finger gesture
             if (scrolling) { scrolling = false; listener.onScrollEnd() }

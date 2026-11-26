@@ -324,6 +324,11 @@ class MainActivity : Activity() {
         behave.addView(divider(), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, px(1)))
         behave.addView(row("Natural scrolling", "Content follows your fingers", switch(prefs.naturalScroll) { prefs.naturalScroll = it }))
         behave.addView(divider(), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, px(1)))
+        behave.addView(row("Remote desktop mode", "Trackpad moves Splashtop's own mouse. Set Splashtop to trackpad mode.", null))
+        behave.addView(segmented(listOf("Auto", "Always", "Off"), prefs.remoteMode) { i ->
+            prefs.remoteMode = i; LapFoldService.instance?.updatePointerVisibility(); recreate()
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = px(12) })
+        behave.addView(divider(), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, px(1)))
         behave.addView(row("Auto split screen", "From the notification or tile: your app on top, LapFold below",
             switch(prefs.autoSplit) { prefs.autoSplit = it }))
         col.addView(behave)
@@ -354,7 +359,7 @@ class MainActivity : Activity() {
             "Typing" to "Tap a text box in the top app, then type. Gboard stays hidden while LapFold is on.",
             "Trackpad" to "1 finger moves the pointer, tap = click, 2-finger tap or right button = right-click, 2-finger drag or the left strip = scroll, hold left button + move = drag.",
             "Modifiers" to "Shift, Ctrl, Alt, Win: tap once for the next key, twice to lock, again to release.",
-            "Splashtop" to "Use its touch mode so clicks land where the pointer is.",
+            "Splashtop" to "Switch Splashtop to its trackpad mode. LapFold's trackpad then moves Splashtop's own mouse pointer (hover works too); tap = click, 2-finger tap = right-click, 2-finger drag = scroll.",
         )
         tips.forEachIndexed { i, (t, d) ->
             if (i > 0) help.addView(divider(), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, px(1)))
