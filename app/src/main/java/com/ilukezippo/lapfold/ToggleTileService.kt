@@ -21,8 +21,9 @@ class ToggleTileService : TileService() {
             }
             return
         }
-        svc.toggle()
-        update()
+        // tile clicks come from the open shade; collapse it so split acts on the app underneath
+        if (!svc.isOn) svc.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
+        android.os.Handler(mainLooper).postDelayed({ svc.toggle(split = true); update() }, 350)
     }
 
     private fun update() {

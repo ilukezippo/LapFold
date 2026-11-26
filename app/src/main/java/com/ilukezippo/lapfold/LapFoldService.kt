@@ -36,6 +36,8 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
     private var panel: View? = null
     private var keyboard: KeyboardView? = null
     private var trackpad: TrackpadView? = null
+    private var scrollStrip: ScrollStripView? = null
+    private var navButtons: NavButtonsView? = null
     private var pointer: PointerView? = null
     private var pointerParams: WindowManager.LayoutParams? = null
 
@@ -50,7 +52,11 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
         private set
 
     private val toggleReceiver = object : BroadcastReceiver() {
-        override fun onReceive(c: Context, i: Intent) { toggle() }
+        override fun onReceive(c: Context, i: Intent) {
+            // close the notification shade first so split screen acts on the app underneath
+            performGlobalAction(GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
+            main.postDelayed({ toggle(split = true) }, 350)
+        }
     }
 
     override fun onServiceConnected() {
@@ -80,25 +86,42 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
 
     // ---------- on / off ----------
 
-    fun toggle() = if (isOn) turnOff() else turnOn()
+    fun toggle(split: Boolean) = if (isOn) turnOff() else turnOn(split)
 
-    fun turnOn() {
+    /** split = put the current app on top and LapFold's pane below (Samsung split screen). */
+    fun turnOn(split: Boolean = false) {
         if (isOn) return
         isOn = true
         mods.clear()
         softKeyboardController.setShowMode(SHOW_MODE_HIDDEN)   // keep Gboard out of the way
         buildOverlays()
         afterStateChange()
+        if (split && prefs.autoSplit) startSplit()
+    }
+
+    private fun startSplit() {
+        if (MainActivity.current?.isInMultiWindowMode == true) return
+        if (!performGlobalAction(GLOBAL_ACTION_TOGGLE_SPLIT_SCREEN)) return
+        // the current app moves to the first half; fill the other half with LapFold's pane
+        main.postDelayed({
+            if (!isOn) return@postDelayed
+            val i = Intent(this, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
+                .putExtra(MainActivity.EXTRA_PANE, true)
+            runCatching { startActivity(i) }
+        }, 700)
     }
 
     fun turnOff() {
         if (!isOn) return
         isOn = false
+        // leave split screen: closing LapFold's pane gives the other app the full screen again
+        MainActivity.current?.let { if (it.isInMultiWindowMode && it.isPane) it.finishAndRemoveTask() }
         gestures.cancel()
         runCatching { softKeyboardController.setShowMode(SHOW_MODE_AUTO) }  // Gboard is back
         panel?.let { runCatching { wm.removeView(it) } }
         pointer?.let { runCatching { wm.removeView(it) } }
-        panel = null; pointer = null; keyboard = null; trackpad = null
+        panel = null; pointer = null; keyboard = null; trackpad = null; scrollStrip = null; navButtons = null
         afterStateChange()
     }
 
@@ -117,6 +140,8 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
         val t = if (prefs.dark) Theme.DARK else Theme.LIGHT
         keyboard?.theme = t
         trackpad?.theme = t
+        scrollStrip?.theme = t
+        navButtons?.theme = t
         panel?.setBackgroundColor(t.panelBg)
     }
 
@@ -127,7 +152,8 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
     private fun panelRect(): Rect {
         val s = screen()
         val p = pane
-        if (p != null && p.width() > 0 && p.height() > 0 && s.contains(p)) return Rect(p)
+        // use LapFold's split pane only when it's the lower half (top/bottom split)
+        if (p != null && p.width() > 0 && p.height() > 0 && s.contains(p) && p.top > s.top + s.height() * 0.25f) return Rect(p)
         return Rect(s.left, s.top + s.height() / 2, s.right, s.bottom)   // bottom half = below the hinge
     }
 
@@ -166,16 +192,23 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
             setPadding(pad, pad, pad, pad)
         }
         root.addView(kb, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 0.62f))
-        val padRow = FrameLayout(this)
-        val padLp = FrameLayout.LayoutParams(0, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER_HORIZONTAL)
-        padRow.addView(tp, padLp)
-        padRow.setPadding(0, (8 * resources.displayMetrics.density).toInt(), 0, 0)
-        root.addView(padRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 0.38f))
-        // trackpad is ~45% of the panel width, centred like a laptop's
-        padRow.addOnLayoutChangeListener { v, l, _, r, _, _, _, _, _ ->
-            val want = ((r - l) * 0.45f).toInt()
-            if (tp.layoutParams.width != want) { tp.layoutParams = padLp.apply { width = want }; v.post { tp.requestLayout() } }
+        val d = resources.displayMetrics.density
+        val strip = ScrollStripView(this, this).apply { theme = t }
+        val nav = NavButtonsView(this,
+            onBack = { performGlobalAction(GLOBAL_ACTION_BACK) },
+            onHome = { performGlobalAction(GLOBAL_ACTION_HOME) }).apply { theme = t }
+        val padRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(0, (8 * d).toInt(), 0, 0)
         }
+        val gap = (10 * d).toInt()
+        padRow.addView(strip, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.06f).apply { rightMargin = gap })
+        padRow.addView(tp, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.45f))
+        padRow.addView(nav, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.13f).apply { leftMargin = gap })
+        padRow.weightSum = 0.64f
+        root.addView(padRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 0.38f))
+        scrollStrip = strip; navButtons = nav
 
         val pr = panelRect()
         wm.addView(root, overlayParams(pr, true))
