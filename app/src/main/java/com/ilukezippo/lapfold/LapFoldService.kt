@@ -144,8 +144,14 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
         if (!isOn || collapsed) return
         collapsed = true
         gestures.cancel()
-        panel?.let { runCatching { wm.removeView(it) } }
         pointer?.let { runCatching { wm.removeView(it) } }
+        // slide the keyboard down, then remove its window
+        panel?.let { v ->
+            v.animate().translationY(v.height.toFloat()).setDuration(220)
+                .setInterpolator(android.view.animation.AccelerateInterpolator())
+                .withEndAction { runCatching { wm.removeView(v) }; v.translationY = 0f }
+                .start()
+        }
         runCatching { softKeyboardController.setShowMode(SHOW_MODE_AUTO) }
         val t = if (prefs.dark) Theme.DARK else Theme.LIGHT
         val tab = showTab ?: TextView(this).apply {
@@ -153,7 +159,9 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
             setOnClickListener { expand() }
         }.also { showTab = it }
         styleTab(tab, t)
+        tab.alpha = 0f
         runCatching { wm.addView(tab, overlayParams(tabRect(), true)) }
+        tab.animate().alpha(1f).setStartDelay(160).setDuration(180).start()
         afterStateChange()
     }
 
@@ -162,7 +170,16 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
         collapsed = false
         showTab?.let { runCatching { wm.removeView(it) } }
         softKeyboardController.setShowMode(SHOW_MODE_HIDDEN)
-        panel?.let { v -> runCatching { wm.addView(v, overlayParams(panelRect(), true)) } }
+        panel?.let { v ->
+            v.animate().cancel()
+            if (v.parent != null) runCatching { wm.removeView(v) }
+            val r = panelRect()
+            v.translationY = r.height().toFloat()
+            runCatching { wm.addView(v, overlayParams(r, true)) }
+            // slide the keyboard up into place
+            v.animate().translationY(0f).setDuration(260)
+                .setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+        }
         pointer?.let { v -> pointerParams?.let { runCatching { wm.addView(v, it) } } }
         relayout()
         afterStateChange()
