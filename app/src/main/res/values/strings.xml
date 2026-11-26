@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">LapFold</string>
+    <string name="a11y_desc">Lets LapFold type into the selected text box and move an on-screen pointer, so the bottom half of your Fold works as a keyboard and trackpad. Gboard stays your keyboard. LapFold does not read or store what is on your screen.</string>
+</resources>
