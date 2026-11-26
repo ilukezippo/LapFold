@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>Unfold it. Bend it. It's a laptop.</b><br>
-  A Windows-style keyboard and trackpad for the bottom half of your Galaxy Z Fold. Works in any app, and Gboard stays your keyboard.
+  A Windows-style keyboard and trackpad for the bottom half of your Galaxy Z Fold. Works in any app. Pair it with a remote desktop app like Splashtop and you get a real laptop.
 </p>
 
 <p align="center">
@@ -41,9 +41,9 @@
 
 ## Why
 
-The Galaxy Z Fold already bends like a tiny laptop, but the bottom half is just more screen. LapFold turns it into a **real keyboard and trackpad** so you can type, click and scroll in any app — remote into your PC with Splashtop, write documents, answer email — without carrying a Bluetooth keyboard.
+The Galaxy Z Fold already bends like a tiny laptop, but the bottom half is just more screen. LapFold turns it into a **real keyboard and trackpad** so you can type, click and scroll in any app — write documents, answer email, or remote into your PC with an app like Splashtop — without carrying a Bluetooth keyboard.
 
-You don't have to switch keyboards: **Gboard stays your default**, and LapFold only takes over while it's on.
+Nothing to set up each time: turn it on when you need a laptop, and off when you're done.
 
 ## How to use
 
@@ -60,11 +60,11 @@ You don't have to switch keyboards: **Gboard stays your default**, and LapFold o
 | Drag **⠿ Move** on the keyboard's top bar | Moves the keyboard anywhere; **✎ Edit → Dock** puts it back |
 | Tap **✎ Edit** | Change the height and width of the keyboard, trackpad, scroll strip and buttons |
 | **Back / Forward** next to the trackpad | Mouse back and forward buttons (Alt + ← / →) |
-| **PrtSc** | Print Screen to the PC in Splashtop, or a phone screenshot otherwise |
+| **PrtSc** | Print Screen to your PC in a remote desktop app, or a phone screenshot otherwise |
 
 Turn it off from the notification, the tile, or the **Off** key. Your app goes back to full screen.
 
-**Splashtop:** switch Splashtop to its **trackpad mode**. LapFold notices Splashtop and drives Splashtop's own mouse pointer, so hover works: tap = click, two-finger tap = right-click, two-finger drag = scroll. (Settings → *Remote desktop mode*: Auto / Always / Off.)
+**Remote desktop:** pair LapFold with a remote desktop app like Splashtop and you get a real laptop. Switch the app to its **trackpad mode**; LapFold's trackpad then works just like a laptop's. (Settings → *Remote desktop mode*: Auto / Always / Off.)
 
 ## What's new in 1.0.0
 
@@ -93,12 +93,12 @@ Everything that changed is in the [changelog](CHANGELOG.md).
 - **Trackpad** with an on-screen pointer, left and right buttons, tap to click, two-finger scroll and drag
 - **Mouse-wheel strip** for quick scrolling, plus mouse **Back / Forward** and **Print Screen** buttons
 - **Move it and resize it:** drag the keyboard anywhere, and change the size of every part in Edit mode
-- **Works in any app**, and Gboard stays your default keyboard — nothing to switch back
+- **Works in any app** — turn it on and off whenever you like
 - **Auto split screen:** your app on top, LapFold below, back to full screen when you turn it off
 - **Turn it on any time:** notification button, Quick Settings tile, or open the app. No hinge angle needed
 - **Hide and show** with a slide animation; the navigation bar stays reachable
 - **Dark and light themes** for the keyboard and the app
-- **Remote desktop mode:** with Splashtop on top, the trackpad moves Splashtop's own mouse pointer
+- **Remote desktop mode:** pair it with a remote desktop app like Splashtop and you get a real laptop
 - **Pointer speed** and **natural scrolling** settings
 - **Updates built in:** checks this GitHub page when you open the app, and from *Check for updates* in Settings
 - **No computer, root or ADB needed.** No accounts, no ads, no telemetry — see the [privacy policy](PRIVACY.md)
@@ -149,7 +149,7 @@ UpdateChecker.kt      update check against GitHub releases
 ## How it works
 
 - LapFold is an **accessibility service**. Android 13 lets an accessibility service type into the focused text box while your normal keyboard stays the default, so LapFold never changes your keyboard setting.
-- While LapFold is on, it hides Gboard (it comes back as soon as LapFold is off or hidden) and draws its keyboard and pointer as overlays that never take focus away from your app.
+- While LapFold is on, it hides the on-screen keyboard (it comes back as soon as LapFold is off or hidden) and draws its keyboard and pointer as overlays that never take focus away from your app.
 - Clicks, right-clicks, scrolling and dragging are touches injected at the pointer's position.
 - Split screen uses Android's own split-screen action: your app goes to the top, and LapFold's screen fills the bottom so the keyboard sits exactly there.
 - Update check: one request to `api.github.com/repos/ilukezippo/LapFold/releases/latest` when you open the app.

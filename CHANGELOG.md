@@ -11,7 +11,6 @@ First release.
 - Drag the keyboard anywhere; Edit mode to resize the keyboard, trackpad, scroll strip and buttons
 - Hide/show arrow with a slide animation; the navigation bar stays reachable
 - Auto split screen from the notification or Quick Settings tile
-- Gboard stays your default keyboard
 - Dark and light themes for the keyboard and the app
 - Update check on startup and in Settings
-- Remote desktop mode: the trackpad moves Splashtop's own mouse pointer
+- Remote desktop mode: pair it with a remote desktop app like Splashtop
