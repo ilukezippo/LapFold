@@ -15,6 +15,7 @@ import android.view.*
 import android.view.accessibility.AccessibilityEvent
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 
 class LapFoldService : AccessibilityService(), KeyListener, PadListener {
@@ -38,6 +39,10 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
     private var trackpad: TrackpadView? = null
     private var scrollStrip: ScrollStripView? = null
     private var navButtons: NavButtonsView? = null
+    private var arrow: TextView? = null
+    private var showTab: TextView? = null
+    var collapsed = false
+        private set
     private var pointer: PointerView? = null
     private var pointerParams: WindowManager.LayoutParams? = null
 
@@ -119,8 +124,12 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
         MainActivity.current?.let { if (it.isInMultiWindowMode && it.isPane) it.finishAndRemoveTask() }
         gestures.cancel()
         runCatching { softKeyboardController.setShowMode(SHOW_MODE_AUTO) }  // Gboard is back
-        panel?.let { runCatching { wm.removeView(it) } }
-        pointer?.let { runCatching { wm.removeView(it) } }
+        if (!collapsed) {
+            panel?.let { runCatching { wm.removeView(it) } }
+            pointer?.let { runCatching { wm.removeView(it) } }
+        }
+        showTab?.let { runCatching { wm.removeView(it) } }
+        showTab = null; arrow = null; collapsed = false
         panel = null; pointer = null; keyboard = null; trackpad = null; scrollStrip = null; navButtons = null
         afterStateChange()
     }
@@ -128,6 +137,52 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
     private fun afterStateChange() {
         updateNotification()
         TileService.requestListeningState(this, ComponentName(this, ToggleTileService::class.java))
+    }
+
+    /** Hide the keyboard to a small arrow tab; Gboard works normally meanwhile. */
+    fun collapse() {
+        if (!isOn || collapsed) return
+        collapsed = true
+        gestures.cancel()
+        panel?.let { runCatching { wm.removeView(it) } }
+        pointer?.let { runCatching { wm.removeView(it) } }
+        runCatching { softKeyboardController.setShowMode(SHOW_MODE_AUTO) }
+        val t = if (prefs.dark) Theme.DARK else Theme.LIGHT
+        val tab = showTab ?: TextView(this).apply {
+            text = "⌃  LapFold"; textSize = 14f; gravity = Gravity.CENTER
+            setOnClickListener { expand() }
+        }.also { showTab = it }
+        styleTab(tab, t)
+        runCatching { wm.addView(tab, overlayParams(tabRect(), true)) }
+        afterStateChange()
+    }
+
+    fun expand() {
+        if (!isOn || !collapsed) return
+        collapsed = false
+        showTab?.let { runCatching { wm.removeView(it) } }
+        softKeyboardController.setShowMode(SHOW_MODE_HIDDEN)
+        panel?.let { v -> runCatching { wm.addView(v, overlayParams(panelRect(), true)) } }
+        pointer?.let { v -> pointerParams?.let { runCatching { wm.addView(v, it) } } }
+        relayout()
+        afterStateChange()
+    }
+
+    private fun tabRect(): Rect {
+        val u = usable()
+        val d = resources.displayMetrics.density
+        val w = (120 * d).toInt(); val h = (34 * d).toInt()
+        val left = u.centerX() - w / 2
+        return Rect(left, u.bottom - h - (6 * d).toInt(), left + w, u.bottom - (6 * d).toInt())
+    }
+
+    private fun styleTab(v: TextView, t: Theme) {
+        v.setTextColor(t.keyText)
+        v.background = android.graphics.drawable.GradientDrawable().apply {
+            setColor(t.keyBg); cornerRadius = 17 * resources.displayMetrics.density
+            setStroke((1 * resources.displayMetrics.density).toInt(), t.padBorder)
+        }
+        v.elevation = 6 * resources.displayMetrics.density
     }
 
     fun setPane(r: Rect?) {
@@ -142,6 +197,8 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
         trackpad?.theme = t
         scrollStrip?.theme = t
         navButtons?.theme = t
+        arrow?.setTextColor(t.keySubText)
+        showTab?.let { styleTab(it, t) }
         panel?.setBackgroundColor(t.panelBg)
     }
 
@@ -149,12 +206,24 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
 
     private fun screen(): Rect = wm.currentWindowMetrics.bounds
 
+    /** Screen area minus the navigation bar / taskbar, so they stay reachable. */
+    private fun usable(): Rect {
+        val m = wm.currentWindowMetrics
+        val b = Rect(m.bounds)
+        val nav = m.windowInsets.getInsets(WindowInsets.Type.navigationBars() or WindowInsets.Type.tappableElement())
+        b.left += nav.left; b.right -= nav.right; b.bottom -= nav.bottom
+        return b
+    }
+
     private fun panelRect(): Rect {
         val s = screen()
+        val u = usable()
         val p = pane
         // use LapFold's split pane only when it's the lower half (top/bottom split)
-        if (p != null && p.width() > 0 && p.height() > 0 && s.contains(p) && p.top > s.top + s.height() * 0.25f) return Rect(p)
-        return Rect(s.left, s.top + s.height() / 2, s.right, s.bottom)   // bottom half = below the hinge
+        if (p != null && p.width() > 0 && p.height() > 0 && s.contains(p) && p.top > s.top + s.height() * 0.25f) {
+            val r = Rect(p); r.intersect(u); return r
+        }
+        return Rect(u.left, s.top + s.height() / 2, u.right, u.bottom)   // bottom half = below the hinge
     }
 
     private fun pointerArea(panelR: Rect): Area {
@@ -191,6 +260,14 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
             val pad = (6 * resources.displayMetrics.density).toInt()
             setPadding(pad, pad, pad, pad)
         }
+        val d0 = resources.displayMetrics.density
+        val hideArrow = TextView(this).apply {
+            text = "⌄"; textSize = 22f; gravity = Gravity.CENTER
+            setTextColor(t.keySubText); includeFontPadding = false
+            setOnClickListener { collapse() }
+        }
+        root.addView(hideArrow, LinearLayout.LayoutParams((90 * d0).toInt(), (24 * d0).toInt()).apply { gravity = Gravity.CENTER_HORIZONTAL })
+        arrow = hideArrow
         root.addView(kb, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 0.62f))
         val d = resources.displayMetrics.density
         val strip = ScrollStripView(this, this).apply { theme = t }
@@ -225,6 +302,12 @@ class LapFoldService : AccessibilityService(), KeyListener, PadListener {
     }
 
     private fun relayout() {
+        if (collapsed) {
+            showTab?.let { v -> val r = tabRect(); (v.layoutParams as? WindowManager.LayoutParams)?.apply {
+                width = r.width(); height = r.height(); x = r.left; y = r.top
+            }?.also { runCatching { wm.updateViewLayout(v, it) } } }
+            return
+        }
         val root = panel ?: return
         val pr = panelRect()
         (root.layoutParams as WindowManager.LayoutParams).apply {
