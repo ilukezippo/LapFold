@@ -69,6 +69,12 @@ class KeyboardView(ctx: Context, private val mods: Modifiers, private val listen
                 active -> theme.accent
                 else -> theme.keyBg
             }
+            if (!isPressed) {   // subtle keycap edge, like Windows 11 keys
+                val base = paint.color
+                paint.color = theme.keyEdge
+                c.drawRoundRect(rect.left, rect.top + 1.5f * dp, rect.right, rect.bottom + 1.5f * dp, r, r, paint)
+                paint.color = base
+            }
             c.drawRoundRect(rect, r, r, paint)
             val label = KeyLayout.labelFor(k, shift, mods.caps)
             text.color = if (active) Color.WHITE else theme.keyText

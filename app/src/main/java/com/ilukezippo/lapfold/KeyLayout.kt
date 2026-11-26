@@ -55,7 +55,7 @@ object KeyLayout {
                 Key("up", "▲", KEYCODE_DPAD_UP)),
         listOf(
             Key("lctrl", "Ctrl", KEYCODE_CTRL_LEFT, width = 1.3f, kind = KeyKind.MODIFIER, mod = Mod.CTRL, repeats = false),
-            Key("win", "⊞", KEYCODE_META_LEFT, width = 1.2f, kind = KeyKind.MODIFIER, mod = Mod.WIN, repeats = false),
+            Key("win", "⊞ Win", KEYCODE_META_LEFT, width = 1.2f, kind = KeyKind.MODIFIER, mod = Mod.WIN, repeats = false),
             Key("lalt", "Alt", KEYCODE_ALT_LEFT, width = 1.2f, kind = KeyKind.MODIFIER, mod = Mod.ALT, repeats = false),
             Key("space", "", KEYCODE_SPACE, width = 6.3f),
             Key("ralt", "Alt", KEYCODE_ALT_RIGHT, width = 1.1f, kind = KeyKind.MODIFIER, mod = Mod.ALT, repeats = false),

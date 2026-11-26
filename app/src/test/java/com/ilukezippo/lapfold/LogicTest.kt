@@ -66,3 +66,13 @@ class LogicTest {
         assertEquals(-PointerMath.accel(10f, 1f), PointerMath.accel(-10f, 1f), 0.0001f)
     }
 }
+
+class UpdateTest {
+    @Test fun comparesVersionsNumerically() {
+        assertTrue(UpdateChecker.isNewer("v1.0.10", "1.0.9"))
+        assertTrue(UpdateChecker.isNewer("1.1", "1.0.0"))
+        assertFalse(UpdateChecker.isNewer("v1.0.0", "1.0.0"))
+        assertFalse(UpdateChecker.isNewer("v0.9.9", "1.0.0"))
+        assertFalse(UpdateChecker.isNewer("garbage", "1.0.0"))
+    }
+}
