@@ -20,7 +20,16 @@ import android.widget.*
  * put your app on top and LapFold on the bottom.
  */
 class MainActivity : Activity() {
-    companion object { const val EXTRA_NO_AUTO_ON = "no_auto_on" }
+    companion object {
+        const val EXTRA_NO_AUTO_ON = "no_auto_on"
+        const val EXTRA_PANE = "pane"
+        var current: MainActivity? = null
+            private set
+    }
+
+    /** Opened by LapFold itself as the bottom split-screen pane. */
+    var isPane = false
+        private set
 
     private lateinit var prefs: Prefs
     private lateinit var status: TextView
@@ -33,6 +42,8 @@ class MainActivity : Activity() {
     override fun onCreate(b: Bundle?) {
         super.onCreate(b)
         prefs = Prefs(this)
+        current = this
+        isPane = intent.getBooleanExtra(EXTRA_PANE, false)
         window.statusBarColor = Color.parseColor("#1C1C1C")
         setContentView(buildUi())
         if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
@@ -42,6 +53,8 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        // launched as the pane but split screen didn't happen: don't cover the user's app
+        if (isPane && !isInMultiWindowMode) { window.decorView.postDelayed({ if (!isInMultiWindowMode) finishAndRemoveTask() }, 500) }
         val svc = LapFoldService.instance
         if (svc != null && !intent.getBooleanExtra(EXTRA_NO_AUTO_ON, false)) svc.turnOn()
         intent.removeExtra(EXTRA_NO_AUTO_ON)
@@ -49,7 +62,10 @@ class MainActivity : Activity() {
         refresh()
     }
 
-    override fun onNewIntent(i: Intent) { super.onNewIntent(i); setIntent(i) }
+    override fun onNewIntent(i: Intent) {
+        super.onNewIntent(i); setIntent(i)
+        isPane = i.getBooleanExtra(EXTRA_PANE, false)
+    }
 
     override fun onStop() {
         super.onStop()
@@ -58,6 +74,7 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         window.decorView.viewTreeObserver.removeOnGlobalLayoutListener(layoutListener)
+        if (current === this) current = null
         super.onDestroy()
     }
 
@@ -126,7 +143,7 @@ class MainActivity : Activity() {
 
         enableBtn = btn("") { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
         col.addView(enableBtn, lp(16))
-        toggleBtn = btn("") { LapFoldService.instance?.toggle(); refresh() }
+        toggleBtn = btn("") { LapFoldService.instance?.toggle(split = false); refresh() }
         col.addView(toggleBtn, lp(10))
 
         val look = card()
@@ -159,17 +176,23 @@ class MainActivity : Activity() {
             setOnCheckedChangeListener { _, c -> prefs.naturalScroll = c }
         }
         pad.addView(natural, lp(8))
+        val autoSplit = Switch(this).apply {
+            text = "Auto split screen (notification & tile)"; setTextColor(Color.WHITE)
+            isChecked = prefs.autoSplit
+            setOnCheckedChangeListener { _, c -> prefs.autoSplit = c }
+        }
+        pad.addView(autoSplit, lp(8))
         col.addView(pad, lp(14))
 
         val help = card()
         help.addView(label("How to use", 16f, true))
         help.addView(label(
             "• Turn on/off: notification button, Quick Settings tile (add \"LapFold\"), or open this app.\n" +
-            "• Laptop look: open Samsung split screen with your app (e.g. Splashtop) on top and LapFold on the bottom. " +
-            "The keyboard fills LapFold's half. Without split screen it covers the bottom half.\n" +
+            "• Laptop look: open your app (e.g. Splashtop), then turn LapFold on from the notification or tile. " +
+            "It splits the screen: your app on top, keyboard on the bottom. Turning off returns the app to full screen.\n" +
             "• Tap a text box in the top app, then type. Gboard stays hidden while LapFold is on.\n" +
             "• Trackpad: 1 finger moves the pointer, tap = click, 2-finger tap or right button = right-click (long press), " +
-            "2-finger drag = scroll, hold left button + move = drag.\n" +
+            "2-finger drag or the strip on the left = scroll, hold left button + move = drag. Back and Home are on the right.\n" +
             "• Shift/Ctrl/Alt/Win: tap once for the next key, twice to lock, again to release.\n" +
             "• Splashtop: use its touch mode so clicks land where the pointer is.\n" +
             "• ⏻ key turns LapFold off.",
