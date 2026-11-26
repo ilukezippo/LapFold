@@ -349,7 +349,7 @@ class MainActivity : Activity() {
         col.addView(section("How to use"), lp(20))
         val help = card()
         val tips = listOf(
-            "On / off" to "Notification button, Quick Settings tile, or open this app. The ⏻ key turns it off.",
+            "On / off" to "Notification button, Quick Settings tile, or open this app. The Off key turns it off.",
             "Laptop look" to "Open your app (e.g. Splashtop), then turn LapFold on from the notification or tile. The screen splits: your app on top, keyboard below.",
             "Typing" to "Tap a text box in the top app, then type. Gboard stays hidden while LapFold is on.",
             "Trackpad" to "1 finger moves the pointer, tap = click, 2-finger tap or right button = right-click, 2-finger drag or the left strip = scroll, hold left button + move = drag.",

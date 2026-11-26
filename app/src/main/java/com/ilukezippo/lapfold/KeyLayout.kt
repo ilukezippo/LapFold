@@ -35,7 +35,7 @@ object KeyLayout {
             (1..12).map { fn(it) } +
             listOf(
                 Key("del", "Del", KEYCODE_FORWARD_DEL, small = true),
-                Key("hide", "⏻", 0, small = true, kind = KeyKind.HIDE, repeats = false),
+                Key("hide", "Off", 0, small = true, kind = KeyKind.HIDE, repeats = false),
             ),
         listOf(ch("`", KEYCODE_GRAVE, "~")) +
             "1234567890".mapIndexed { i, c -> ch(c.toString(), KEYCODE_0 + (c - '0'), "!@#$%^&*()"[i].toString()) } +
